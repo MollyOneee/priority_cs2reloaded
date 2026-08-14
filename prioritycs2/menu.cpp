@@ -83,12 +83,10 @@ namespace
     float glow_alpha = 45.0f;
 
     bool fov_changer = false;
-    bool third_person = false;
     bool remove_flash = false;
     bool remove_smoke = false;
     bool remove_scope = false;
     float camera_fov = 90.0f;
-    float third_person_distance = 110.0f;
 
     bool watermark = true;
     bool spectator_list = true;
@@ -690,6 +688,11 @@ namespace
             toggle_row("Dropped weapons", &dropped_weapons);
             toggle_row("Grenade warning", &grenade_warning);
         });
+        layout.add(1, "world_modulation", "World Modulation", "Tint scene geometry", 95.0f, "world color modulation", [] {
+            toggle_row("Enabled", &settings::world_modulation_enabled, [] {
+                color_row("World color", &settings::world_modulation_color);
+            });
+        });
     }
 
     void draw_player(card_layout& layout)
@@ -699,8 +702,8 @@ namespace
             slider_row("Camera FOV", &camera_fov, 60.0f, 140.0f, "%.0f°");
         });
         layout.add(1, "third_person", "Third Person", "Third-person camera", 125.0f, "enabled distance", [] {
-            toggle_row("Enabled", &third_person);
-            slider_row("Distance", &third_person_distance, 40.0f, 220.0f, "%.0f");
+            toggle_row("Enabled", &settings::third_person_enabled);
+            slider_row("Distance", &settings::third_person_distance, 40.0f, 220.0f, "%.0f");
         });
         layout.add(1, "viewmodel", "Viewmodel", "Weapon position and FOV", 170.0f, "viewmodel x y z fov", [] {
             toggle_row("Enabled", &settings::viewmodel_enabled, [] {
@@ -714,6 +717,14 @@ namespace
             toggle_row("Flash effect", &remove_flash);
             toggle_row("Smoke overlay", &remove_smoke);
             toggle_row("Scope overlay", &remove_scope);
+        });
+        layout.add(0, "skin_changer", "Skin Changer", "Active weapon paint override", 175.0f, "skin paint kit wear seed stattrak", [] {
+            toggle_row("Enabled", &settings::skin_changer_enabled, [] {
+                slider_row("Paint kit ID", &settings::skin_paint_kit, 0.0f, 20000.0f, "%.0f");
+                slider_row("Seed", &settings::skin_seed, 0.0f, 1000.0f, "%.0f");
+                slider_row("Wear", &settings::skin_wear, 0.0001f, 1.0f, "%.4f");
+                toggle_row("StatTrak", &settings::skin_stattrak);
+            });
         });
     }
 

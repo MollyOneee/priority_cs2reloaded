@@ -28,6 +28,18 @@ namespace settings
     inline float viewmodel_z = 0.0f;
     inline float viewmodel_fov = 68.0f;
 
+    inline bool third_person_enabled = false;
+    inline float third_person_distance = 110.0f;
+
+    inline bool world_modulation_enabled = false;
+    inline ImVec4 world_modulation_color{ 0.55f, 0.60f, 0.75f, 1.0f };
+
+    inline bool skin_changer_enabled = false;
+    inline float skin_paint_kit = 0.0f;
+    inline float skin_seed = 0.0f;
+    inline float skin_wear = 0.08f;
+    inline bool skin_stattrak = false;
+
     inline bool esp_enabled = true;
     inline bool esp_box = true;
     inline bool esp_name = true;

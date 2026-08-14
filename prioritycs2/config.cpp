@@ -77,6 +77,17 @@ namespace
         number("viewmodel.z", settings::viewmodel_z);
         number("viewmodel.fov", settings::viewmodel_fov);
 
+        boolean("thirdperson.enabled", settings::third_person_enabled);
+        number("thirdperson.distance", settings::third_person_distance);
+        boolean("world.enabled", settings::world_modulation_enabled);
+        color("world.color", settings::world_modulation_color);
+
+        boolean("skin.enabled", settings::skin_changer_enabled);
+        number("skin.paint_kit", settings::skin_paint_kit);
+        number("skin.seed", settings::skin_seed);
+        number("skin.wear", settings::skin_wear);
+        boolean("skin.stattrak", settings::skin_stattrak);
+
         boolean("esp.enabled", settings::esp_enabled);
         boolean("esp.box", settings::esp_box);
         boolean("esp.name", settings::esp_name);
@@ -209,6 +220,17 @@ namespace
         number("viewmodel.z", settings::viewmodel_z);
         number("viewmodel.fov", settings::viewmodel_fov);
 
+        boolean("thirdperson.enabled", settings::third_person_enabled);
+        number("thirdperson.distance", settings::third_person_distance);
+        boolean("world.enabled", settings::world_modulation_enabled);
+        color("world.color", settings::world_modulation_color);
+
+        boolean("skin.enabled", settings::skin_changer_enabled);
+        number("skin.paint_kit", settings::skin_paint_kit);
+        number("skin.seed", settings::skin_seed);
+        number("skin.wear", settings::skin_wear);
+        boolean("skin.stattrak", settings::skin_stattrak);
+
         boolean("esp.enabled", settings::esp_enabled);
         boolean("esp.box", settings::esp_box);
         boolean("esp.name", settings::esp_name);
@@ -239,6 +261,10 @@ namespace
         settings::viewmodel_y = std::clamp(settings::viewmodel_y, -2.0f, 2.0f);
         settings::viewmodel_z = std::clamp(settings::viewmodel_z, -2.0f, 2.0f);
         settings::viewmodel_fov = std::clamp(settings::viewmodel_fov, 60.0f, 68.0f);
+        settings::third_person_distance = std::clamp(settings::third_person_distance, 40.0f, 220.0f);
+        settings::skin_paint_kit = std::clamp(settings::skin_paint_kit, 0.0f, 20000.0f);
+        settings::skin_seed = std::clamp(settings::skin_seed, 0.0f, 1000.0f);
+        settings::skin_wear = std::clamp(settings::skin_wear, 0.0001f, 1.0f);
     }
 }
 

@@ -15,10 +15,30 @@ int main()
     if (!config::initialize())
         return 5;
     settings::aim_fov = 9.25f;
+    settings::third_person_enabled = true;
+    settings::third_person_distance = 173.0f;
+    settings::world_modulation_enabled = true;
+    settings::skin_changer_enabled = true;
+    settings::skin_paint_kit = 711.0f;
+    settings::skin_seed = 42.0f;
+    settings::skin_wear = 0.13f;
+    settings::skin_stattrak = true;
     if (!config::save())
         return 6;
     settings::aim_fov = 1.0f;
-    if (!config::load() || std::abs(settings::aim_fov - 9.25f) > 0.001f)
+    settings::third_person_enabled = false;
+    settings::third_person_distance = 40.0f;
+    settings::world_modulation_enabled = false;
+    settings::skin_changer_enabled = false;
+    settings::skin_paint_kit = 0.0f;
+    settings::skin_seed = 0.0f;
+    settings::skin_wear = 1.0f;
+    settings::skin_stattrak = false;
+    if (!config::load() || std::abs(settings::aim_fov - 9.25f) > 0.001f ||
+        !settings::third_person_enabled || std::abs(settings::third_person_distance - 173.0f) > 0.001f ||
+        !settings::world_modulation_enabled || !settings::skin_changer_enabled ||
+        std::abs(settings::skin_paint_kit - 711.0f) > 0.001f || std::abs(settings::skin_seed - 42.0f) > 0.001f ||
+        std::abs(settings::skin_wear - 0.13f) > 0.001f || !settings::skin_stattrak)
         return 7;
 
     IMGUI_CHECKVERSION();

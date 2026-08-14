@@ -17,6 +17,9 @@
 - Aim Assist использует тот же bone snapshot: multi-select Head/Neck/Chest/Pelvis, Visible only, FOV, Smoothness и Mouse 1/4/5/Always;
 - Triggerbot работает по сущности под прицелом, поддерживает задержку выстрела, minimum damage и удержание R8;
 - viewmodel hook позволяет менять X/Y/Z и viewmodel FOV в безопасных диапазонах движка;
+- базовая third-person камера с настройкой дистанции;
+- цветовая модуляция геометрии мира;
+- базовый skin override активного оружия: paint kit, seed, wear и StatTrak (без inventory changer, ножей, перчаток и агентов);
 - профили конфигурации автоматически сохраняются и загружаются из `%APPDATA%\prioritycs2\configs`.
 
 ## Сборка

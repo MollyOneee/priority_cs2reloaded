@@ -2,6 +2,7 @@
 
 #include "hooks.hpp"
 
+#include "esp.hpp"
 #include "renderer.hpp"
 #include "menu.hpp"
 #include "pattern.hpp"
@@ -12,6 +13,8 @@
 #include <dxgi.h>
 
 #include <algorithm>
+#include <cmath>
+#include <cstdint>
 
 namespace
 {
@@ -22,6 +25,8 @@ namespace
     using get_async_key_state_fn = SHORT(WINAPI*)(int);
     using get_key_state_fn = SHORT(WINAPI*)(int);
     using get_keyboard_state_fn = BOOL(WINAPI*)(PBYTE);
+    using override_view_fn = void(__fastcall*)(std::uintptr_t, std::uintptr_t);
+    using draw_scene_object_fn = std::uintptr_t(__fastcall*)(std::uintptr_t, std::uintptr_t, std::uintptr_t, int, int, std::uintptr_t, std::uintptr_t, std::uintptr_t);
     struct viewmodel_vector { float x{}, y{}, z{}; };
     using viewmodel_fn = void(__fastcall*)(__int64, viewmodel_vector*, float*);
 
@@ -41,6 +46,55 @@ namespace
     get_keyboard_state_fn original_get_keyboard_state = nullptr;
     viewmodel_fn original_viewmodel = nullptr;
     void* viewmodel_target = nullptr;
+    override_view_fn original_override_view = nullptr;
+    void* override_view_target = nullptr;
+    draw_scene_object_fn original_draw_scene_object = nullptr;
+    void* draw_scene_object_target = nullptr;
+
+    void __fastcall override_view(std::uintptr_t context, std::uintptr_t view_setup)
+    {
+        original_override_view(context, view_setup);
+        if (!settings::third_person_enabled || !esp::has_local_player() || !view_setup)
+            return;
+
+        struct vector3 { float x{}, y{}, z{}; };
+        auto* origin = reinterpret_cast<vector3*>(view_setup + 0x4a0);
+        const auto* angles = reinterpret_cast<const vector3*>(view_setup + 0x4b8);
+        if (!std::isfinite(origin->x) || !std::isfinite(origin->y) || !std::isfinite(origin->z) ||
+            !std::isfinite(angles->x) || !std::isfinite(angles->y))
+            return;
+        constexpr float to_radians = 0.017453292519943295f;
+        const float pitch = angles->x * to_radians;
+        const float yaw = angles->y * to_radians;
+        const float cosine_pitch = std::cos(pitch);
+        const float distance = std::clamp(settings::third_person_distance, 40.0f, 220.0f);
+        origin->x -= cosine_pitch * std::cos(yaw) * distance;
+        origin->y -= cosine_pitch * std::sin(yaw) * distance;
+        origin->z -= -std::sin(pitch) * distance;
+    }
+
+    std::uintptr_t __fastcall draw_scene_object(std::uintptr_t a1, std::uintptr_t a2, std::uintptr_t batch,
+        int batch_count, int a5, std::uintptr_t a6, std::uintptr_t a7, std::uintptr_t a8)
+    {
+        if (settings::world_modulation_enabled && batch && batch_count > 0 && batch_count < 4096)
+        {
+            const ImVec4 color = settings::world_modulation_color;
+            struct packed_color { std::uint8_t r, g, b, a; };
+            const packed_color tint{
+                static_cast<std::uint8_t>(std::clamp(color.x, 0.0f, 1.0f) * 255.0f),
+                static_cast<std::uint8_t>(std::clamp(color.y, 0.0f, 1.0f) * 255.0f),
+                static_cast<std::uint8_t>(std::clamp(color.z, 0.0f, 1.0f) * 255.0f),
+                static_cast<std::uint8_t>(std::clamp(color.w, 0.0f, 1.0f) * 255.0f)
+            };
+            __try
+            {
+                for (int index = 0; index < batch_count; ++index)
+                    *reinterpret_cast<packed_color*>(batch + static_cast<std::uintptr_t>(index) * 0x68 + 0x50) = tint;
+            }
+            __except (EXCEPTION_EXECUTE_HANDLER) {}
+        }
+        return original_draw_scene_object(a1, a2, batch, batch_count, a5, a6, a7, a8);
+    }
 
     void __fastcall viewmodel(__int64 context, viewmodel_vector* position, float* fov)
     {
@@ -280,7 +334,18 @@ namespace
     bool create_game_hooks()
     {
         viewmodel_target = reinterpret_cast<void*>(pattern::find(L"client.dll", "40 55 53 56 41 56 41 57 48 8B"));
-        return viewmodel_target && MH_CreateHook(viewmodel_target, &viewmodel, reinterpret_cast<void**>(&original_viewmodel)) == MH_OK;
+        const auto override_anchor = pattern::find(L"client.dll", "A8 00 00 00 48 8D 05 ? ? ? ? 4C 89 74 24 20");
+        const auto override_table = override_anchor ? pattern::resolve_relative(override_anchor + 4, 3, 7) : 0;
+        override_view_target = override_table ? *reinterpret_cast<void**>(override_table + 0x78) : nullptr;
+
+        const auto scene_anchor = pattern::find(L"scenesystem.dll", "48 8D 05 ? ? ? ? 48 89 07 48 8B 7C 24 48");
+        const auto scene_table = pattern::resolve_relative(scene_anchor, 3, 7);
+        draw_scene_object_target = scene_table ? *reinterpret_cast<void**>(scene_table + 0x8) : nullptr;
+
+        return viewmodel_target && override_view_target && draw_scene_object_target &&
+            MH_CreateHook(viewmodel_target, &viewmodel, reinterpret_cast<void**>(&original_viewmodel)) == MH_OK &&
+            MH_CreateHook(override_view_target, &override_view, reinterpret_cast<void**>(&original_override_view)) == MH_OK &&
+            MH_CreateHook(draw_scene_object_target, &draw_scene_object, reinterpret_cast<void**>(&original_draw_scene_object)) == MH_OK;
     }
 }
 

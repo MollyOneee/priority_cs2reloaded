@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <cstring>
 #include <type_traits>
+#include <unordered_map>
 
 namespace
 {
@@ -29,6 +30,8 @@ namespace
         std::uint32_t scene_node{}, dormant{}, absolute_origin{}, model_state{};
         std::uint32_t spotted_state{}, spotted_mask{}, crosshair_entity{};
         std::uint32_t weapon_services{}, active_weapon{}, attribute_manager{}, item{}, item_definition_index{};
+        std::uint32_t item_id_high{}, item_id_low{}, account_id{}, initialized{};
+        std::uint32_t fallback_paint{}, fallback_seed{}, fallback_wear{}, fallback_stattrak{}, steam_id{};
 
         bool valid() const
         {
@@ -62,6 +65,21 @@ namespace
         bool holding{};
     } trigger_runtime;
 
+    struct original_skin_t
+    {
+        std::uint32_t item_id_high{}, item_id_low{}, account_id{};
+        int paint_kit{}, seed{}, stattrak{};
+        float wear{};
+        bool initialized{}, captured{}, overridden{};
+        int applied_paint{}, applied_seed{}, applied_stattrak{};
+        float applied_wear{};
+    };
+
+    std::unordered_map<std::uintptr_t, original_skin_t> original_skins;
+    using weapon_update_skin_fn = void(__fastcall*)(std::uintptr_t, int*);
+    weapon_update_skin_fn weapon_update_skin{};
+    bool local_player_available{};
+
     // Plain SEH boundary: bad game pointers are rejected without a VirtualQuery per field.
     bool safe_copy(void* destination, const void* source, std::size_t size)
     {
@@ -91,6 +109,22 @@ namespace
         T value{};
         read(address, value);
         return value;
+    }
+
+    template <typename T>
+    bool write(std::uintptr_t address, const T& value)
+    {
+        if (!address)
+            return false;
+        __try
+        {
+            *reinterpret_cast<T*>(address) = value;
+            return true;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return false;
+        }
     }
 
     template <typename Result, typename... Args>
@@ -173,6 +207,20 @@ namespace
         state.offsets.attribute_manager = schema_offset("C_EconEntity", "m_AttributeManager");
         state.offsets.item = schema_offset("C_AttributeContainer", "m_Item");
         state.offsets.item_definition_index = schema_offset("C_EconItemView", "m_iItemDefinitionIndex");
+        state.offsets.item_id_high = schema_offset("C_EconItemView", "m_iItemIDHigh");
+        state.offsets.item_id_low = schema_offset("C_EconItemView", "m_iItemIDLow");
+        state.offsets.account_id = schema_offset("C_EconItemView", "m_iAccountID");
+        state.offsets.initialized = schema_offset("C_EconItemView", "m_bInitialized");
+        state.offsets.fallback_paint = schema_offset("C_EconEntity", "m_nFallbackPaintKit");
+        state.offsets.fallback_seed = schema_offset("C_EconEntity", "m_nFallbackSeed");
+        state.offsets.fallback_wear = schema_offset("C_EconEntity", "m_flFallbackWear");
+        state.offsets.fallback_stattrak = schema_offset("C_EconEntity", "m_nFallbackStatTrak");
+        state.offsets.steam_id = schema_offset("CBasePlayerController", "m_steamID");
+        if (!weapon_update_skin)
+        {
+            weapon_update_skin = reinterpret_cast<weapon_update_skin_fn>(pattern::find(client,
+                "48 89 5C 24 10 48 89 6C 24 18 48 89 74 24 20 57 41 56 41 57 48 83 EC 40 48 8B EA 48 8B F1 48 8D 54 24 60 E8 ? ? ? ? 48 8B 46 10"));
+        }
         state.initialized = state.offsets.valid();
         return state.initialized;
     }
@@ -429,6 +477,93 @@ namespace
         return base * std::pow(0.98f, distance / 500.0f);
     }
 
+    void refresh_weapon_skin(std::uintptr_t weapon)
+    {
+        if (!weapon_update_skin || !weapon)
+            return;
+        __try
+        {
+            int empty_mask[3]{};
+            weapon_update_skin(weapon, empty_mask);
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER) {}
+    }
+
+    void run_skin_changer(std::uintptr_t entity_list, std::uintptr_t local_controller, std::uintptr_t local_pawn)
+    {
+        const auto& offsets = state.offsets;
+        const bool offsets_ready = offsets.weapon_services && offsets.active_weapon && offsets.attribute_manager && offsets.item &&
+            offsets.item_id_high && offsets.item_id_low && offsets.account_id && offsets.initialized && offsets.fallback_paint &&
+            offsets.fallback_seed && offsets.fallback_wear && offsets.fallback_stattrak;
+        if (!offsets_ready || !entity_list || !local_pawn)
+            return;
+
+        if (!settings::skin_changer_enabled || settings::skin_paint_kit < 1.0f)
+        {
+            for (auto& [weapon, original] : original_skins)
+            {
+                if (!original.captured || !original.overridden)
+                    continue;
+                const auto item_view = weapon + offsets.attribute_manager + offsets.item;
+                write(item_view + offsets.item_id_high, original.item_id_high);
+                write(item_view + offsets.item_id_low, original.item_id_low);
+                write(item_view + offsets.account_id, original.account_id);
+                write(item_view + offsets.initialized, original.initialized);
+                write(weapon + offsets.fallback_paint, original.paint_kit);
+                write(weapon + offsets.fallback_seed, original.seed);
+                write(weapon + offsets.fallback_wear, original.wear);
+                write(weapon + offsets.fallback_stattrak, original.stattrak);
+                refresh_weapon_skin(weapon);
+            }
+            original_skins.clear();
+            return;
+        }
+
+        const auto services = read<std::uintptr_t>(local_pawn + offsets.weapon_services);
+        const auto weapon = services ? entity_by_handle(entity_list, read<std::uint32_t>(services + offsets.active_weapon)) : 0;
+        if (!weapon)
+            return;
+
+        const auto item_view = weapon + offsets.attribute_manager + offsets.item;
+        auto& original = original_skins[weapon];
+        if (!original.captured)
+        {
+            original.item_id_high = read<std::uint32_t>(item_view + offsets.item_id_high);
+            original.item_id_low = read<std::uint32_t>(item_view + offsets.item_id_low);
+            original.account_id = read<std::uint32_t>(item_view + offsets.account_id);
+            original.initialized = read<bool>(item_view + offsets.initialized);
+            original.paint_kit = read<int>(weapon + offsets.fallback_paint);
+            original.seed = read<int>(weapon + offsets.fallback_seed);
+            original.wear = read<float>(weapon + offsets.fallback_wear);
+            original.stattrak = read<int>(weapon + offsets.fallback_stattrak);
+            original.captured = true;
+        }
+
+        const int paint_kit = std::clamp(static_cast<int>(std::round(settings::skin_paint_kit)), 1, 20000);
+        const int seed = std::clamp(static_cast<int>(std::round(settings::skin_seed)), 0, 1000);
+        const float wear = std::clamp(settings::skin_wear, 0.0001f, 1.0f);
+        const int stattrak = settings::skin_stattrak ? 0 : -1;
+        if (original.overridden && original.applied_paint == paint_kit && original.applied_seed == seed &&
+            original.applied_stattrak == stattrak && std::abs(original.applied_wear - wear) < 0.00001f)
+            return;
+
+        const std::uint64_t steam_id = offsets.steam_id && local_controller ? read<std::uint64_t>(local_controller + offsets.steam_id) : 0;
+        write(item_view + offsets.item_id_high, std::uint32_t{ 0xf0000000 });
+        write(item_view + offsets.item_id_low, std::uint32_t{ 0x10 });
+        write(item_view + offsets.account_id, static_cast<std::uint32_t>(steam_id));
+        write(item_view + offsets.initialized, true);
+        write(weapon + offsets.fallback_paint, paint_kit);
+        write(weapon + offsets.fallback_seed, seed);
+        write(weapon + offsets.fallback_wear, wear);
+        write(weapon + offsets.fallback_stattrak, stattrak);
+        original.overridden = true;
+        original.applied_paint = paint_kit;
+        original.applied_seed = seed;
+        original.applied_wear = wear;
+        original.applied_stattrak = stattrak;
+        refresh_weapon_skin(weapon);
+    }
+
     void run_trigger(const std::array<player_snapshot, 64>& players, std::size_t player_count,
         std::uintptr_t entity_list, std::uintptr_t local_pawn, int local_team, const vector3& local_origin,
         const matrix4x4& matrix, const ImVec2& display)
@@ -446,44 +581,18 @@ namespace
             return;
         }
 
+        // Let the game's own crosshair trace decide whether an entity is actually
+        // intersected. Projected screen circles are only approximations and could
+        // fire beside a model at unusual FOV/aspect ratios.
         const player_snapshot* target{};
         if (state.offsets.crosshair_entity)
         {
-            const int crosshair_value = read<int>(local_pawn + state.offsets.crosshair_entity);
-            const auto crosshair_entity = entity_by_index(entity_list, crosshair_value & 0x7fff);
-            for (std::size_t index = 0; index < player_count; ++index)
-                if (players[index].pawn == crosshair_entity || players[index].controller == crosshair_entity)
-                {
-                    target = &players[index];
-                    break;
-                }
-        }
-
-        // Some client builds leave m_iIDEntIndex stale/empty. Fall back to the player
-        // rectangle under the screen center, while still requiring the visibility mask.
-        if (!target)
-        {
-            const ImVec2 center(display.x * 0.5f, display.y * 0.5f);
-            float best_distance = FLT_MAX;
-            for (std::size_t index = 0; index < player_count; ++index)
+            const int crosshair_index = read<int>(local_pawn + state.offsets.crosshair_entity);
+            const auto crossed_entity = crosshair_index > 0 ? entity_by_index(entity_list, crosshair_index & 0x7fff) : 0;
+            for (std::size_t index = 0; crossed_entity && index < player_count; ++index)
             {
-                const player_snapshot& player = players[index];
-                if (!player.visible || (!settings::trigger_teammates && local_team && player.team == local_team))
-                    continue;
-                vector3 head = player.origin;
-                head.z += 72.0f;
-                ImVec2 feet{}, head_screen{};
-                if (!project(player.origin, matrix, display, feet) || !project(head, matrix, display, head_screen))
-                    continue;
-                const float height = std::abs(feet.y - head_screen.y);
-                const float half_width = height * 0.24f;
-                if (height < 8.0f || center.x < head_screen.x - half_width || center.x > head_screen.x + half_width ||
-                    center.y < head_screen.y || center.y > feet.y)
-                    continue;
-                const float dx = center.x - head_screen.x;
-                const float dy = center.y - (head_screen.y + feet.y) * 0.5f;
-                const float distance = dx * dx + dy * dy;
-                if (distance < best_distance) { best_distance = distance; target = &player; }
+                if (players[index].pawn == crossed_entity)
+                    target = &players[index];
             }
         }
         if (!target || (!settings::trigger_teammates && local_team && target->team == local_team))
@@ -511,7 +620,7 @@ namespace
         {
             mouse_button(true);
             trigger_runtime.holding = true;
-            trigger_runtime.revolver_release_at = now + 250;
+            trigger_runtime.revolver_release_at = now + 450;
         }
         else
         {
@@ -534,8 +643,13 @@ namespace esp
             mouse_button(false);
             trigger_runtime = {};
         }
-        if ((!settings::esp_enabled && !settings::aim_enabled && !settings::trigger_enabled) || !draw_list || display_size.x <= 0.0f || display_size.y <= 0.0f)
+        if ((!settings::esp_enabled && !settings::aim_enabled && !settings::trigger_enabled &&
+            !settings::third_person_enabled && !settings::skin_changer_enabled && original_skins.empty()) ||
+            !draw_list || display_size.x <= 0.0f || display_size.y <= 0.0f)
+        {
+            local_player_available = false;
             return;
+        }
 
         if (settings::aim_enabled && settings::aim_show_fov)
             draw_list->AddCircle(ImVec2(display_size.x * 0.5f, display_size.y * 0.5f), aim_radius(display_size),
@@ -560,6 +674,8 @@ namespace esp
         vector3 local_eye = local_origin;
         local_eye.z += 64.0f;
         const int local_team = local_pawn ? read<int>(local_pawn + state.offsets.team) : 0;
+        local_player_available = local_pawn && read<int>(local_pawn + state.offsets.health) > 0;
+        run_skin_changer(entity_list, local_controller, local_pawn);
         int local_index{};
         for (int entity_index = 1; entity_index <= 64 && !local_index; ++entity_index)
             if (entity_by_index(entity_list, entity_index) == local_controller) local_index = entity_index;
@@ -642,11 +758,16 @@ namespace esp
         }
     }
 
+    bool has_local_player() { return local_player_available; }
+
     void reset()
     {
         if (trigger_runtime.holding)
             mouse_button(false);
         trigger_runtime = {};
+        original_skins.clear();
+        weapon_update_skin = nullptr;
+        local_player_available = false;
         state = {};
         game_trace::reset();
     }
