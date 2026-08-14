@@ -333,6 +333,105 @@ namespace
         ImGui::PopID();
     }
 
+    void multi_bool_row(const char* label, bool* values, const char* const* items, int item_count)
+    {
+        ImGui::PushID(label);
+        const ImVec2 start = ImGui::GetCursorScreenPos();
+        const float width = ImGui::GetContentRegionAvail().x;
+        const float box_width = px(112.0f);
+        const float box_height = px(24.0f);
+        const ImVec2 box(start.x + width - box_width, start.y + px(1.0f));
+
+        int selected_count = 0;
+        int first_selected = -1;
+        for (int index = 0; index < item_count; ++index)
+        {
+            if (!values[index]) continue;
+            if (first_selected < 0) first_selected = index;
+            ++selected_count;
+        }
+        std::string summary;
+        if (selected_count == 0)
+            summary = "None";
+        else if (selected_count == item_count)
+            summary = "All";
+        else if (selected_count == 1)
+            summary = items[first_selected];
+        else
+            summary = std::string(items[first_selected]) + " +" + std::to_string(selected_count - 1);
+
+        add_text(ImGui::GetWindowDrawList(), fonts::regular, 14.0f,
+            ImVec2(start.x, start.y + px(5.0f)), rgba(255, 255, 255, 165), label);
+        ImGui::SetCursorScreenPos(box);
+        ImGui::InvisibleButton("##multi", ImVec2(box_width, box_height));
+        const bool hovered = ImGui::IsItemHovered();
+        if (ImGui::IsItemClicked())
+            ImGui::OpenPopup("##multi_popup");
+
+        ImDrawList* draw = ImGui::GetWindowDrawList();
+        draw->AddRectFilled(box, ImVec2(box.x + box_width, box.y + box_height),
+            rgba(255, 255, 255, hovered ? 10 : 6), px(3.0f));
+        draw->AddRect(box, ImVec2(box.x + box_width, box.y + box_height),
+            rgba(255, 255, 255, hovered ? 20 : 12), px(3.0f));
+        add_text(draw, fonts::regular, 13.0f, ImVec2(box.x + px(8.0f), box.y + px(5.0f)),
+            rgba(255, 255, 255, 150), summary.c_str());
+        draw->AddTriangleFilled(ImVec2(box.x + box_width - px(14.0f), box.y + px(10.0f)),
+            ImVec2(box.x + box_width - px(8.0f), box.y + px(10.0f)),
+            ImVec2(box.x + box_width - px(11.0f), box.y + px(14.0f)), rgba(255, 255, 255, 70));
+
+        ImGui::SetNextWindowPos(ImVec2(box.x, box.y + box_height + px(4.0f)));
+        ImGui::SetNextWindowSizeConstraints(ImVec2(box_width, 0.0f), ImVec2(box_width, FLT_MAX));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, px(5.0f, 5.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, px(0.0f, 2.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, px(4.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, px(1.0f));
+        ImGui::PushStyleColor(ImGuiCol_PopupBg, rgba(13, 13, 16, 250));
+        ImGui::PushStyleColor(ImGuiCol_Border, rgba(255, 255, 255, 14));
+        if (ImGui::BeginPopup("##multi_popup", ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoScrollbar |
+            ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoNavInputs))
+        {
+            for (int index = 0; index < item_count; ++index)
+            {
+                ImGui::PushID(index);
+                const ImVec2 row = ImGui::GetCursorScreenPos();
+                ImGui::InvisibleButton("##item", ImVec2(box_width - px(10.0f), px(23.0f)));
+                const bool item_hovered = ImGui::IsItemHovered();
+                if (ImGui::IsItemClicked())
+                    values[index] = !values[index];
+
+                float& animation = row_animations[ImGui::GetItemID()];
+                const float target = values[index] ? 1.0f : item_hovered ? 0.45f : 0.0f;
+                animation += (target - animation) * std::min(1.0f, ImGui::GetIO().DeltaTime * 15.0f);
+                ImDrawList* popup_draw = ImGui::GetWindowDrawList();
+                if (item_hovered)
+                    popup_draw->AddRectFilled(row, ImVec2(row.x + box_width - px(10.0f), row.y + px(23.0f)),
+                        rgba(255, 255, 255, 6), px(3.0f));
+
+                const ImVec2 check(row.x + px(5.0f), row.y + px(5.5f));
+                popup_draw->AddRectFilled(check, ImVec2(check.x + px(12.0f), check.y + px(12.0f)),
+                    values[index] ? accent_color(0.22f + animation * 0.12f) : rgba(255, 255, 255, 6), px(3.0f));
+                popup_draw->AddRect(check, ImVec2(check.x + px(12.0f), check.y + px(12.0f)),
+                    values[index] ? accent_color(0.75f) : rgba(255, 255, 255, 18), px(3.0f));
+                if (values[index])
+                {
+                    popup_draw->AddLine(ImVec2(check.x + px(3.0f), check.y + px(6.0f)),
+                        ImVec2(check.x + px(5.2f), check.y + px(8.2f)), accent_color(), px(1.5f));
+                    popup_draw->AddLine(ImVec2(check.x + px(5.2f), check.y + px(8.2f)),
+                        ImVec2(check.x + px(9.5f), check.y + px(3.5f)), accent_color(), px(1.5f));
+                }
+                add_text(popup_draw, fonts::regular, 13.0f, ImVec2(row.x + px(23.0f), row.y + px(4.0f)),
+                    rgba(255, 255, 255, values[index] ? 205 : 115), items[index]);
+                ImGui::PopID();
+            }
+            ImGui::EndPopup();
+        }
+        ImGui::PopStyleColor(2);
+        ImGui::PopStyleVar(4);
+        ImGui::SetCursorScreenPos(start);
+        ImGui::Dummy(ImVec2(width, px(28.0f)));
+        ImGui::PopID();
+    }
+
     void compact_color_picker(ImVec4* color)
     {
         float hue{}, saturation{}, value{};
@@ -505,16 +604,14 @@ namespace
     void draw_combat(card_layout& layout)
     {
         static const char* aim_keys[] = { "Mouse 1", "Mouse 4", "Mouse 5", "Always" };
+        static const char* aim_hitboxes[] = { "Head", "Neck", "Chest", "Pelvis" };
 
         layout.add(0, "aim_assist", "Aim Assist", "Target selection and smoothing", 208.0f, "enabled visible fov smooth target", [] {
             toggle_row("Enabled", &settings::aim_enabled, [] {
                 combo_row("Activation", &settings::aim_key, aim_keys, IM_ARRAYSIZE(aim_keys));
                 toggle_row("Visible only", &settings::aim_visible_only);
                 toggle_row("Target teammates", &settings::aim_teammates);
-                toggle_row("Hitbox: head", &settings::aim_hitboxes[0]);
-                toggle_row("Hitbox: neck", &settings::aim_hitboxes[1]);
-                toggle_row("Hitbox: chest", &settings::aim_hitboxes[2]);
-                toggle_row("Hitbox: pelvis", &settings::aim_hitboxes[3]);
+                multi_bool_row("Hitboxes", settings::aim_hitboxes.data(), aim_hitboxes, IM_ARRAYSIZE(aim_hitboxes));
                 toggle_row("Draw FOV", &settings::aim_show_fov);
                 color_row("FOV color", &settings::aim_fov_color);
             });

@@ -33,7 +33,6 @@ namespace
     bool cursor_captured = false;
     RECT saved_clip{};
     HCURSOR saved_cursor = nullptr;
-    bool saved_cursor_visible = false;
     int show_cursor_adjustments = 0;
 
     bool is_mouse_message(UINT message)
@@ -75,10 +74,7 @@ namespace
         GetClipCursor(&saved_clip);
         CURSORINFO cursor_info{ sizeof(CURSORINFO) };
         if (GetCursorInfo(&cursor_info))
-        {
             saved_cursor = cursor_info.hCursor;
-            saved_cursor_visible = (cursor_info.flags & CURSOR_SHOWING) != 0;
-        }
         ClipCursor(nullptr);
         ReleaseCapture();
 
@@ -101,10 +97,24 @@ namespace
             ShowCursor(FALSE);
         show_cursor_adjustments = 0;
 
-        SetCursor(saved_cursor_visible ? (saved_cursor ? saved_cursor : LoadCursorW(nullptr, IDC_ARROW)) : nullptr);
+        // Never force a null cursor here. Panorama may report CURSOR_SHOWING as false
+        // while still expecting its cursor to be restored by WM_SETCURSOR.
+        if (saved_cursor)
+            SetCursor(saved_cursor);
         saved_cursor = nullptr;
-        saved_cursor_visible = false;
         cursor_captured = false;
+
+        // Let CS2 decide whether the cursor belongs on screen (gameplay vs. Panorama/
+        // buy menu) immediately instead of leaving the last ImGui cursor state behind.
+        if (window && original_wnd_proc)
+        {
+            POINT point{};
+            GetCursorPos(&point);
+            ScreenToClient(window, &point);
+            CallWindowProcW(original_wnd_proc, window, WM_MOUSEMOVE, 0, MAKELPARAM(point.x, point.y));
+            CallWindowProcW(original_wnd_proc, window, WM_SETCURSOR,
+                reinterpret_cast<WPARAM>(window), MAKELPARAM(HTCLIENT, WM_MOUSEMOVE));
+        }
     }
 
     void sync_cursor_state()

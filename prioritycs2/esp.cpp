@@ -135,9 +135,15 @@ namespace
         if (!state.scan_attempted)
         {
             state.scan_attempted = true;
-            state.entity_list_storage = pattern::resolve_relative(pattern::find(client, "48 8B 0D ? ? ? ? 8B FB C1 EB 0E"));
-            state.local_controller_storage = pattern::resolve_relative(pattern::find(client, "48 39 1D ? ? ? ? 75 04 B0 01"));
-            state.view_matrix = pattern::resolve_relative(pattern::find(client, "48 8D 0D ? ? ? ? 48 C1 E0 06"));
+            // These are RIP-relative MOV/LEA instructions: displacement starts at +3,
+            // and the complete instruction is 7 bytes long. The call-relative helper
+            // defaults (1, 5) must not be used here.
+            state.entity_list_storage = pattern::resolve_relative(
+                pattern::find(client, "48 8B 0D ? ? ? ? 8B FB C1 EB 0E"), 3, 7);
+            state.local_controller_storage = pattern::resolve_relative(
+                pattern::find(client, "48 39 1D ? ? ? ? 75 04 B0 01"), 3, 7);
+            state.view_matrix = pattern::resolve_relative(
+                pattern::find(client, "48 8D 0D ? ? ? ? 48 C1 E0 06"), 3, 7);
         }
         if (!state.entity_list_storage || !state.local_controller_storage || !state.view_matrix)
             return false;
