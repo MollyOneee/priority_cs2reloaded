@@ -1,0 +1,33 @@
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.VC.db
+*.VC.VC.opendb
+
+# Project build output
+/bin/
+/build/
+/prioritycs2/build/
+**/x64/Debug/
+**/x64/Release/
+**/Debug/
+**/Release/
+
+# Compiler/linker intermediates
+*.obj
+*.pch
+*.pdb
+*.ilk
+*.idb
+*.ipdb
+*.iobj
+*.tlog
+*.lastbuildstate
+*.exp
+
+# Local OS/editor files
+.DS_Store
+Thumbs.db
+*.tmp
+*.log

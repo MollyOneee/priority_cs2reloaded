@@ -1,0 +1,6 @@
+#include "resource.h"
+
+IDR_FONT_SFPRO_REGULAR RCDATA "assets\\fonts\\SF-Pro-Display-Regular.otf"
+IDR_FONT_SFPRO_MEDIUM  RCDATA "assets\\fonts\\SF-Pro-Display-Medium.otf"
+IDR_FONT_SFPRO_BOLD    RCDATA "assets\\fonts\\SF-Pro-Display-Bold.otf"
+IDR_FONT_ICONISHE      RCDATA "assets\\fonts\\iconishe.ttf"

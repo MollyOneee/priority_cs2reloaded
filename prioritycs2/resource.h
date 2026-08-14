@@ -1,0 +1,6 @@
+#pragma once
+
+#define IDR_FONT_SFPRO_REGULAR 101
+#define IDR_FONT_SFPRO_MEDIUM  102
+#define IDR_FONT_SFPRO_BOLD    103
+#define IDR_FONT_ICONISHE      104

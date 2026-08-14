@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Core">
+      <UniqueIdentifier>{3E099631-2BD4-48D2-9B10-9226703D2B31}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="External\ImGui">
+      <UniqueIdentifier>{C2C310F2-E31A-407A-9A17-2D649F4175DE}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="External\MinHook">
+      <UniqueIdentifier>{C1697849-C7A1-4902-B662-453EF2AB4681}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Resources">
+      <UniqueIdentifier>{D69BE981-0168-4573-B7CD-CFF2DE398D93}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ClInclude Include="fonts.hpp"><Filter>Core</Filter></ClInclude>
+    <ClInclude Include="esp.hpp"><Filter>Core</Filter></ClInclude>
+    <ClInclude Include="framework.h"><Filter>Core</Filter></ClInclude>
+    <ClInclude Include="hooks.hpp"><Filter>Core</Filter></ClInclude>
+    <ClInclude Include="menu.hpp"><Filter>Core</Filter></ClInclude>
+    <ClInclude Include="pattern.hpp"><Filter>Core</Filter></ClInclude>
+    <ClInclude Include="pch.h"><Filter>Core</Filter></ClInclude>
+    <ClInclude Include="renderer.hpp"><Filter>Core</Filter></ClInclude>
+    <ClInclude Include="resource.h"><Filter>Resources</Filter></ClInclude>
+    <ClInclude Include="settings.hpp"><Filter>Core</Filter></ClInclude>
+    <ClInclude Include="trace.hpp"><Filter>Core</Filter></ClInclude>
+    <ClInclude Include="external\imgui\imconfig.h"><Filter>External\ImGui</Filter></ClInclude>
+    <ClInclude Include="external\imgui\imgui.h"><Filter>External\ImGui</Filter></ClInclude>
+    <ClInclude Include="external\imgui\imgui_internal.h"><Filter>External\ImGui</Filter></ClInclude>
+    <ClInclude Include="external\imgui\backends\imgui_impl_dx11.h"><Filter>External\ImGui</Filter></ClInclude>
+    <ClInclude Include="external\imgui\backends\imgui_impl_win32.h"><Filter>External\ImGui</Filter></ClInclude>
+    <ClInclude Include="external\minhook\include\MinHook.h"><Filter>External\MinHook</Filter></ClInclude>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ClCompile Include="dllmain.cpp"><Filter>Core</Filter></ClCompile>
+    <ClCompile Include="esp.cpp"><Filter>Core</Filter></ClCompile>
+    <ClCompile Include="fonts.cpp"><Filter>Core</Filter></ClCompile>
+    <ClCompile Include="hooks.cpp"><Filter>Core</Filter></ClCompile>
+    <ClCompile Include="menu.cpp"><Filter>Core</Filter></ClCompile>
+    <ClCompile Include="pattern.cpp"><Filter>Core</Filter></ClCompile>
+    <ClCompile Include="pch.cpp"><Filter>Core</Filter></ClCompile>
+    <ClCompile Include="renderer.cpp"><Filter>Core</Filter></ClCompile>
+    <ClCompile Include="trace.cpp"><Filter>Core</Filter></ClCompile>
+    <ClCompile Include="external\imgui\imgui.cpp"><Filter>External\ImGui</Filter></ClCompile>
+    <ClCompile Include="external\imgui\imgui_draw.cpp"><Filter>External\ImGui</Filter></ClCompile>
+    <ClCompile Include="external\imgui\imgui_tables.cpp"><Filter>External\ImGui</Filter></ClCompile>
+    <ClCompile Include="external\imgui\imgui_widgets.cpp"><Filter>External\ImGui</Filter></ClCompile>
+    <ClCompile Include="external\imgui\backends\imgui_impl_dx11.cpp"><Filter>External\ImGui</Filter></ClCompile>
+    <ClCompile Include="external\imgui\backends\imgui_impl_win32.cpp"><Filter>External\ImGui</Filter></ClCompile>
+    <ClCompile Include="external\minhook\src\buffer.c"><Filter>External\MinHook</Filter></ClCompile>
+    <ClCompile Include="external\minhook\src\hook.c"><Filter>External\MinHook</Filter></ClCompile>
+    <ClCompile Include="external\minhook\src\trampoline.c"><Filter>External\MinHook</Filter></ClCompile>
+    <ClCompile Include="external\minhook\src\hde\hde32.c"><Filter>External\MinHook</Filter></ClCompile>
+    <ClCompile Include="external\minhook\src\hde\hde64.c"><Filter>External\MinHook</Filter></ClCompile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ResourceCompile Include="resources.rc"><Filter>Resources</Filter></ResourceCompile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="assets\fonts\SF-Pro-Display-Regular.otf"><Filter>Resources</Filter></None>
+    <None Include="assets\fonts\SF-Pro-Display-Medium.otf"><Filter>Resources</Filter></None>
+    <None Include="assets\fonts\SF-Pro-Display-Bold.otf"><Filter>Resources</Filter></None>
+    <None Include="assets\fonts\iconishe.ttf"><Filter>Resources</Filter></None>
+    <None Include="external\imgui\LICENSE.txt"><Filter>External\ImGui</Filter></None>
+    <None Include="external\minhook\LICENSE.txt"><Filter>External\MinHook</Filter></None>
+  </ItemGroup>
+</Project>
