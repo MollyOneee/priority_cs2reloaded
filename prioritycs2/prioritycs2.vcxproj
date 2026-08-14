@@ -85,6 +85,7 @@
   </ItemDefinitionGroup>
 
   <ItemGroup>
+    <ClInclude Include="config.hpp" />
     <ClInclude Include="fonts.hpp" />
     <ClInclude Include="esp.hpp" />
     <ClInclude Include="framework.h" />
@@ -105,6 +106,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ClCompile Include="config.cpp" />
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="esp.cpp" />
     <ClCompile Include="fonts.cpp" />

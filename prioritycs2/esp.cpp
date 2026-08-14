@@ -47,7 +47,7 @@ namespace
 
     struct player_snapshot
     {
-        std::uintptr_t pawn{};
+        std::uintptr_t controller{}, pawn{};
         vector3 origin{};
         std::array<bone_data, 24> bones{};
         char name[64]{};
@@ -213,6 +213,7 @@ namespace
 
     bool collect_player(std::uintptr_t entity_list, std::uintptr_t controller, player_snapshot& result)
     {
+        result.controller = controller;
         if (!read<bool>(controller + state.offsets.pawn_alive))
             return false;
         const auto pawn = entity_by_handle(entity_list, read<std::uint32_t>(controller + state.offsets.pawn_handle));
@@ -227,7 +228,7 @@ namespace
         if (name_pointer)
             safe_copy(result.name, reinterpret_cast<const void*>(name_pointer), sizeof(result.name) - 1);
 
-        if ((settings::esp_skeleton || settings::aim_enabled) && state.offsets.model_state)
+        if ((settings::esp_skeleton || settings::aim_enabled || settings::trigger_enabled) && state.offsets.model_state)
         {
             const auto cache = read<std::uintptr_t>(scene + state.offsets.model_state + 0x80);
             const int count = read<int>(scene + state.offsets.model_state + 0x8c);
@@ -429,7 +430,8 @@ namespace
     }
 
     void run_trigger(const std::array<player_snapshot, 64>& players, std::size_t player_count,
-        std::uintptr_t entity_list, std::uintptr_t local_pawn, int local_team, const vector3& local_origin)
+        std::uintptr_t entity_list, std::uintptr_t local_pawn, int local_team, const vector3& local_origin,
+        const matrix4x4& matrix, const ImVec2& display)
     {
         const ULONGLONG now = GetTickCount64();
         if (trigger_runtime.holding && (now >= trigger_runtime.revolver_release_at || !settings::trigger_enabled || menu::is_open()))
@@ -438,17 +440,52 @@ namespace
             trigger_runtime.holding = false;
             trigger_runtime.cooldown_until = now + 90;
         }
-        if (!settings::trigger_enabled || menu::is_open() || !local_pawn || !state.offsets.crosshair_entity || trigger_runtime.holding)
+        if (!settings::trigger_enabled || menu::is_open() || !local_pawn || trigger_runtime.holding)
         {
             trigger_runtime.candidate = 0;
             return;
         }
 
-        const int crosshair_index = read<int>(local_pawn + state.offsets.crosshair_entity);
-        const auto crosshair_pawn = entity_by_index(entity_list, crosshair_index);
         const player_snapshot* target{};
-        for (std::size_t index = 0; index < player_count; ++index)
-            if (players[index].pawn == crosshair_pawn) { target = &players[index]; break; }
+        if (state.offsets.crosshair_entity)
+        {
+            const int crosshair_value = read<int>(local_pawn + state.offsets.crosshair_entity);
+            const auto crosshair_entity = entity_by_index(entity_list, crosshair_value & 0x7fff);
+            for (std::size_t index = 0; index < player_count; ++index)
+                if (players[index].pawn == crosshair_entity || players[index].controller == crosshair_entity)
+                {
+                    target = &players[index];
+                    break;
+                }
+        }
+
+        // Some client builds leave m_iIDEntIndex stale/empty. Fall back to the player
+        // rectangle under the screen center, while still requiring the visibility mask.
+        if (!target)
+        {
+            const ImVec2 center(display.x * 0.5f, display.y * 0.5f);
+            float best_distance = FLT_MAX;
+            for (std::size_t index = 0; index < player_count; ++index)
+            {
+                const player_snapshot& player = players[index];
+                if (!player.visible || (!settings::trigger_teammates && local_team && player.team == local_team))
+                    continue;
+                vector3 head = player.origin;
+                head.z += 72.0f;
+                ImVec2 feet{}, head_screen{};
+                if (!project(player.origin, matrix, display, feet) || !project(head, matrix, display, head_screen))
+                    continue;
+                const float height = std::abs(feet.y - head_screen.y);
+                const float half_width = height * 0.24f;
+                if (height < 8.0f || center.x < head_screen.x - half_width || center.x > head_screen.x + half_width ||
+                    center.y < head_screen.y || center.y > feet.y)
+                    continue;
+                const float dx = center.x - head_screen.x;
+                const float dy = center.y - (head_screen.y + feet.y) * 0.5f;
+                const float distance = dx * dx + dy * dy;
+                if (distance < best_distance) { best_distance = distance; target = &player; }
+            }
+        }
         if (!target || (!settings::trigger_teammates && local_team && target->team == local_team))
         {
             trigger_runtime.candidate = 0;
@@ -479,8 +516,10 @@ namespace
         else
         {
             mouse_button(true);
-            mouse_button(false);
-            trigger_runtime.cooldown_until = now + 80;
+            // Keep the button down across frames. A same-call DOWN+UP pair can be
+            // missed by CS2 raw input and was the reason the trigger appeared dead.
+            trigger_runtime.holding = true;
+            trigger_runtime.revolver_release_at = now + 24;
         }
         trigger_runtime.candidate_since = now;
     }
@@ -546,7 +585,7 @@ namespace esp
         }
 
         run_aim(players, player_count, matrix, display_size, local_team, local_eye, local_pawn);
-        run_trigger(players, player_count, entity_list, local_pawn, local_team, local_origin);
+        run_trigger(players, player_count, entity_list, local_pawn, local_team, local_origin, matrix, display_size);
 
         for (std::size_t player_index = 0; player_index < player_count; ++player_index)
         {

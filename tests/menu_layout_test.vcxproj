@@ -39,6 +39,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="menu_layout_test.cpp" />
+    <ClCompile Include="..\prioritycs2\config.cpp" />
     <ClCompile Include="..\prioritycs2\menu.cpp" />
     <ClCompile Include="..\prioritycs2\external\imgui\imgui.cpp" />
     <ClCompile Include="..\prioritycs2\external\imgui\imgui_draw.cpp" />

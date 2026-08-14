@@ -2,6 +2,7 @@
 #include <imgui_internal.h>
 
 #include "fonts.hpp"
+#include "config.hpp"
 #include "menu.hpp"
 #include "settings.hpp"
 
@@ -11,6 +12,15 @@
 
 int main()
 {
+    if (!config::initialize())
+        return 5;
+    settings::aim_fov = 9.25f;
+    if (!config::save())
+        return 6;
+    settings::aim_fov = 1.0f;
+    if (!config::load() || std::abs(settings::aim_fov - 9.25f) > 0.001f)
+        return 7;
+
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
 
@@ -107,6 +117,7 @@ int main()
     }
 
     menu::close();
+    config::shutdown();
     ImGui::DestroyContext();
     return 0;
 }

@@ -11,6 +11,8 @@
 #include <d3d11.h>
 #include <dxgi.h>
 
+#include <algorithm>
+
 namespace
 {
     using present_fn = HRESULT(__stdcall*)(IDXGISwapChain*, UINT, UINT);
@@ -47,12 +49,12 @@ namespace
             return;
         if (position)
         {
-            position->x = settings::viewmodel_x;
-            position->y = settings::viewmodel_y;
-            position->z = settings::viewmodel_z;
+            position->x = std::clamp(settings::viewmodel_x, -2.0f, 2.5f);
+            position->y = std::clamp(settings::viewmodel_y, -2.0f, 2.0f);
+            position->z = std::clamp(settings::viewmodel_z, -2.0f, 2.0f);
         }
         if (fov)
-            *fov = settings::viewmodel_fov;
+            *fov = std::clamp(settings::viewmodel_fov, 60.0f, 68.0f);
     }
 
     bool is_mouse_key(int key)

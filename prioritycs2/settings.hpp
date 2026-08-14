@@ -48,6 +48,8 @@ namespace settings
 
     // 75%, 100%, 125%, 150%.
     inline int menu_scale_index = 1;
+    inline float menu_opacity = 96.0f;
+    inline ImVec4 menu_accent{ 163.0f / 255.0f, 168.0f / 255.0f, 198.0f / 255.0f, 1.0f };
 
     inline float menu_scale()
     {

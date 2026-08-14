@@ -2,6 +2,7 @@
 
 #include "renderer.hpp"
 
+#include "config.hpp"
 #include "fonts.hpp"
 #include "esp.hpp"
 #include "menu.hpp"
@@ -183,6 +184,7 @@ namespace
 
     void cleanup_resources()
     {
+        config::shutdown();
         menu::close();
         release_cursor();
 
@@ -278,6 +280,7 @@ namespace
 
         fonts::initialize(module_handle);
         apply_style();
+        config::initialize();
 
         if (!ImGui_ImplWin32_Init(window))
         {
@@ -327,6 +330,7 @@ namespace renderer
         ImGui::NewFrame();
         esp::draw(ImGui::GetBackgroundDrawList(), ImGui::GetIO().DisplaySize);
         menu::draw();
+        config::tick();
         ImGui::Render();
 
         device_context->OMSetRenderTargets(1, &render_target, nullptr);

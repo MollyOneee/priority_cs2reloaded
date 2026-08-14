@@ -1,6 +1,7 @@
 #include "pch.h"
 
 #include "menu.hpp"
+#include "config.hpp"
 #include "fonts.hpp"
 #include "settings.hpp"
 
@@ -62,7 +63,6 @@ namespace
     category selected_category = category::combat;
     std::array<float, static_cast<std::size_t>(category::count)> category_animation{};
     char search_text[64]{};
-    ImVec4 accent{ 163.0f / 255.0f, 168.0f / 255.0f, 198.0f / 255.0f, 1.0f };
 
     bool recoil_enabled = true;
     bool backtrack_enabled = false;
@@ -96,7 +96,6 @@ namespace
     bool hit_sound = false;
     bool auto_accept = false;
     bool reveal_ranks = false;
-    float menu_opacity = 96.0f;
     int hit_sound_type = 0;
 
     std::unordered_map<ImGuiID, float> toggle_animations;
@@ -127,6 +126,7 @@ namespace
 
     ImU32 accent_color(float alpha_value = 1.0f)
     {
+        const ImVec4& accent = settings::menu_accent;
         return ImGui::ColorConvertFloat4ToU32(ImVec4(accent.x, accent.y, accent.z, accent.w * alpha_value * draw_alpha));
     }
 
@@ -188,9 +188,9 @@ namespace
             accent_color(animation * 0.12f), px(3.0f));
 
         const ImU32 glyph = ImGui::ColorConvertFloat4ToU32(ImVec4(
-            1.0f + (accent.x - 1.0f) * animation,
-            1.0f + (accent.y - 1.0f) * animation,
-            1.0f + (accent.z - 1.0f) * animation,
+            1.0f + (settings::menu_accent.x - 1.0f) * animation,
+            1.0f + (settings::menu_accent.y - 1.0f) * animation,
+            1.0f + (settings::menu_accent.z - 1.0f) * animation,
             (0.40f + animation * 0.60f) * draw_alpha));
         const float minus_alpha = 1.0f - animation;
         if (minus_alpha > 0.01f)
@@ -704,10 +704,10 @@ namespace
         });
         layout.add(1, "viewmodel", "Viewmodel", "Weapon position and FOV", 170.0f, "viewmodel x y z fov", [] {
             toggle_row("Enabled", &settings::viewmodel_enabled, [] {
-                slider_row("Offset X", &settings::viewmodel_x, -10.0f, 10.0f, "%.1f");
-                slider_row("Offset Y", &settings::viewmodel_y, -10.0f, 10.0f, "%.1f");
-                slider_row("Offset Z", &settings::viewmodel_z, -10.0f, 10.0f, "%.1f");
-                slider_row("Viewmodel FOV", &settings::viewmodel_fov, 40.0f, 100.0f, "%.0f°");
+                slider_row("Offset X", &settings::viewmodel_x, -2.0f, 2.5f, "%.1f");
+                slider_row("Offset Y", &settings::viewmodel_y, -2.0f, 2.0f, "%.1f");
+                slider_row("Offset Z", &settings::viewmodel_z, -2.0f, 2.0f, "%.1f");
+                slider_row("Viewmodel FOV", &settings::viewmodel_fov, 60.0f, 68.0f, "%.0f°");
             });
         });
         layout.add(0, "removals", "Removals", "Hide distracting effects", 150.0f, "flash smoke scope", [] {
@@ -735,27 +735,59 @@ namespace
             toggle_row("Reveal ranks", &reveal_ranks);
         });
         layout.add(1, "menu_style", "Menu Style", "Appearance of this menu", 148.0f, "opacity accent color", [] {
-            slider_row("Opacity", &menu_opacity, 65.0f, 100.0f, "%.0f%%");
+            slider_row("Opacity", &settings::menu_opacity, 65.0f, 100.0f, "%.0f%%");
             combo_row("Scale", &settings::menu_scale_index, scales, IM_ARRAYSIZE(scales));
-            color_row("Accent", &accent);
+            color_row("Accent", &settings::menu_accent);
         });
     }
 
     void draw_configs(card_layout& layout)
     {
         layout.add(0, "configs_local", "Local Configs", "Saved configuration profiles", 168.0f, "default legit visual load save", [] {
-            push_font(fonts::regular, 14.0f);
-            ImGui::Selectable("Default", true, 0, ImVec2(0.0f, px(28.0f)));
-            ImGui::Selectable("Visual", false, 0, ImVec2(0.0f, px(28.0f)));
-            ImGui::Selectable("Movement", false, 0, ImVec2(0.0f, px(28.0f)));
-            ImGui::PopFont();
+            const auto& profiles = config::profiles();
+            for (std::size_t index = 0; index < profiles.size(); ++index)
+            {
+                ImGui::PushID(static_cast<int>(index));
+                const ImVec2 row = ImGui::GetCursorScreenPos();
+                const float width = ImGui::GetContentRegionAvail().x;
+                ImGui::InvisibleButton("##profile_row", ImVec2(width, px(27.0f)));
+                if (ImGui::IsItemClicked()) config::select(index);
+                const bool selected = config::selected_index() == index;
+                const bool hovered = ImGui::IsItemHovered();
+                ImDrawList* draw = ImGui::GetWindowDrawList();
+                if (selected || hovered)
+                    draw->AddRectFilled(row, ImVec2(row.x + width, row.y + px(27.0f)),
+                        selected ? accent_color(0.11f) : rgba(255, 255, 255, 6), px(4.0f));
+                if (selected)
+                    draw->AddRectFilled(ImVec2(row.x + px(3.0f), row.y + px(7.0f)),
+                        ImVec2(row.x + px(5.0f), row.y + px(20.0f)), accent_color(), px(1.0f));
+                add_text(draw, fonts::regular, 14.0f, ImVec2(row.x + px(11.0f), row.y + px(5.0f)),
+                    rgba(255, 255, 255, selected ? 215 : 125), profiles[index].c_str());
+                ImGui::PopID();
+            }
         });
-        layout.add(1, "config_actions", "Actions", "Manage selected profile", 145.0f, "save load create delete", [] {
+        layout.add(1, "config_actions", "Actions", "Profiles auto-save after changes", 190.0f, "save load create delete", [] {
+            static char new_name[33] = "new_config";
             push_font(fonts::medium, 13.0f);
-            ImGui::Button("Load", ImVec2(-1.0f, px(30.0f)));
-            ImGui::Button("Save", ImVec2(-1.0f, px(30.0f)));
-            ImGui::Button("Create new", ImVec2(-1.0f, px(30.0f)));
+            if (ImGui::Button("Load selected", ImVec2(-1.0f, px(30.0f)))) config::load();
+            if (ImGui::Button("Save selected", ImVec2(-1.0f, px(30.0f)))) config::save();
+            if (ImGui::Button("Delete selected", ImVec2(-1.0f, px(30.0f)))) config::remove();
             ImGui::PopFont();
+
+            ImGui::SetNextItemWidth(-1.0f);
+            push_font(fonts::regular, 13.0f);
+            ImGui::InputTextWithHint("##new_config_name", "Profile name", new_name, sizeof(new_name));
+            ImGui::PopFont();
+            push_font(fonts::medium, 13.0f);
+            if (ImGui::Button("Create profile", ImVec2(-1.0f, px(30.0f)))) config::create(new_name);
+            ImGui::PopFont();
+
+            if (!config::status().empty())
+            {
+                push_font(fonts::regular, 12.0f);
+                ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 0.35f), "%s", config::status().c_str());
+                ImGui::PopFont();
+            }
         });
     }
 
@@ -858,8 +890,8 @@ namespace
             ImGui::TextUnformatted("Menu appearance");
             ImGui::PopFont();
             ImGui::Separator();
-            color_row("Main color", &accent);
-            slider_row("Opacity", &menu_opacity, 65.0f, 100.0f, "%.0f%%");
+            color_row("Main color", &settings::menu_accent);
+            slider_row("Opacity", &settings::menu_opacity, 65.0f, 100.0f, "%.0f%%");
             ImGui::EndPopup();
         }
     }
@@ -976,7 +1008,7 @@ namespace menu
         {
             const ImVec2 origin = ImGui::GetWindowPos();
             ImDrawList* draw = ImGui::GetWindowDrawList();
-            const int background_alpha = static_cast<int>(255.0f * std::clamp(menu_opacity / 100.0f, 0.65f, 1.0f));
+            const int background_alpha = static_cast<int>(255.0f * std::clamp(settings::menu_opacity / 100.0f, 0.65f, 1.0f));
 
             draw->AddRectFilled(origin, ImVec2(origin.x + window_size.x, origin.y + window_size.y), rgba(11, 11, 13, background_alpha), px(10.0f));
             draw->AddRectFilled(origin, ImVec2(origin.x + sidebar_width, origin.y + window_size.y), rgba(255, 255, 255, 3), px(10.0f), ImDrawFlags_RoundCornersLeft);

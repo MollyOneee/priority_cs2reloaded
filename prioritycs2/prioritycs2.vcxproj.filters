@@ -16,6 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ClInclude Include="config.hpp"><Filter>Core</Filter></ClInclude>
     <ClInclude Include="fonts.hpp"><Filter>Core</Filter></ClInclude>
     <ClInclude Include="esp.hpp"><Filter>Core</Filter></ClInclude>
     <ClInclude Include="framework.h"><Filter>Core</Filter></ClInclude>
@@ -36,6 +37,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ClCompile Include="config.cpp"><Filter>Core</Filter></ClCompile>
     <ClCompile Include="dllmain.cpp"><Filter>Core</Filter></ClCompile>
     <ClCompile Include="esp.cpp"><Filter>Core</Filter></ClCompile>
     <ClCompile Include="fonts.cpp"><Filter>Core</Filter></ClCompile>
