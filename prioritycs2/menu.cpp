@@ -3,6 +3,7 @@
 #include "menu.hpp"
 #include "config.hpp"
 #include "fonts.hpp"
+#include "skin_catalog.hpp"
 #include "settings.hpp"
 
 #include <imgui.h>
@@ -24,6 +25,7 @@ namespace
     constexpr const char* icon_movement = "\xEE\x81\x86";   // mouse, U+E046
     constexpr const char* icon_visuals = "\xEE\x80\xBD";    // monitor, U+E03D
     constexpr const char* icon_player = "\xEE\x85\xAB";     // user, U+E16B
+    constexpr const char* icon_skins = "\xEE\x80\xBD";      // monitor, U+E03D
     constexpr const char* icon_misc = "\xEE\x83\xB1";       // setting, U+E0F1
     constexpr const char* icon_configs = "\xE2\x86\x91";    // folder, U+2191
     constexpr const char* icon_scripts = "\xC3\x9C";         // code, U+00DC
@@ -35,6 +37,7 @@ namespace
         movement,
         visuals,
         player,
+        skins,
         misc,
         configs,
         scripts,
@@ -54,6 +57,7 @@ namespace
         category_entry{ category::movement, "Movement", icon_movement, false },
         category_entry{ category::visuals, "Visuals", icon_visuals, false },
         category_entry{ category::player, "Player", icon_player, false },
+        category_entry{ category::skins, "Skins", icon_skins, false },
         category_entry{ category::misc, "Misc", icon_misc, false },
         category_entry{ category::configs, "Configs", icon_configs, true },
         category_entry{ category::scripts, "Scripts", icon_scripts, true }
@@ -599,6 +603,70 @@ namespace
         }
     };
 
+    ImU32 rarity_color(int rarity, int alpha = 255)
+    {
+        constexpr std::array<ImVec4, 8> colors{
+            ImVec4{ 0.55f, 0.58f, 0.63f, 1.0f }, ImVec4{ 0.69f, 0.76f, 0.85f, 1.0f },
+            ImVec4{ 0.37f, 0.60f, 0.85f, 1.0f }, ImVec4{ 0.29f, 0.41f, 1.0f, 1.0f },
+            ImVec4{ 0.53f, 0.28f, 1.0f, 1.0f }, ImVec4{ 0.83f, 0.17f, 0.90f, 1.0f },
+            ImVec4{ 0.92f, 0.29f, 0.29f, 1.0f }, ImVec4{ 0.89f, 0.68f, 0.22f, 1.0f }
+        };
+        ImVec4 color = colors[std::clamp(rarity, 0, 7)];
+        color.w = (alpha / 255.0f) * draw_alpha;
+        return ImGui::ColorConvertFloat4ToU32(color);
+    }
+
+    const char* rarity_name(int rarity)
+    {
+        constexpr const char* names[] = { "Base", "Consumer", "Industrial", "Mil-Spec", "Restricted", "Classified", "Covert", "Contraband" };
+        return names[std::clamp(rarity, 0, 7)];
+    }
+
+    bool catalog_row(const char* id, const char* name, bool selected, int rarity = -1)
+    {
+        const ImVec2 position = ImGui::GetCursorScreenPos();
+        const float width = ImGui::GetContentRegionAvail().x;
+        const float height = px(31.0f);
+        ImGui::PushID(id);
+        ImGui::InvisibleButton("##catalog_row", ImVec2(width, height));
+        const bool clicked = ImGui::IsItemClicked();
+        const bool hovered = ImGui::IsItemHovered();
+        ImDrawList* draw = ImGui::GetWindowDrawList();
+        if (selected || hovered)
+            draw->AddRectFilled(position, ImVec2(position.x + width, position.y + height),
+                selected ? accent_color(0.13f) : rgba(255, 255, 255, 7), px(5.0f));
+        if (selected)
+            draw->AddRect(position, ImVec2(position.x + width, position.y + height), accent_color(0.28f), px(5.0f));
+        if (rarity >= 0)
+            draw->AddRectFilled(position, ImVec2(position.x + px(3.0f), position.y + height), rarity_color(rarity), px(2.0f));
+        add_text(draw, fonts::regular, 13.0f, ImVec2(position.x + px(rarity >= 0 ? 11.0f : 9.0f), position.y + px(8.0f)),
+            rgba(255, 255, 255, selected ? 235 : hovered ? 205 : 150), name);
+        if (rarity >= 0)
+        {
+            const char* label = rarity_name(rarity);
+            const ImVec2 size = fonts::regular->CalcTextSizeA(px(10.0f), FLT_MAX, 0.0f, label);
+            add_text(draw, fonts::regular, 10.0f, ImVec2(position.x + width - size.x - px(8.0f), position.y + px(10.0f)),
+                rarity_color(rarity, selected ? 235 : 165), label);
+        }
+        ImGui::PopID();
+        return clicked;
+    }
+
+    bool action_button(const char* label)
+    {
+        const ImVec2 position = ImGui::GetCursorScreenPos();
+        const float width = ImGui::GetContentRegionAvail().x;
+        ImGui::InvisibleButton(label, ImVec2(width, px(32.0f)));
+        const bool clicked = ImGui::IsItemClicked();
+        const bool hovered = ImGui::IsItemHovered();
+        ImDrawList* draw = ImGui::GetWindowDrawList();
+        draw->AddRectFilled(position, ImVec2(position.x + width, position.y + px(32.0f)), accent_color(hovered ? 0.28f : 0.20f), px(5.0f));
+        draw->AddRect(position, ImVec2(position.x + width, position.y + px(32.0f)), accent_color(hovered ? 0.52f : 0.35f), px(5.0f));
+        const ImVec2 size = fonts::medium->CalcTextSizeA(px(13.0f), FLT_MAX, 0.0f, label);
+        add_text(draw, fonts::medium, 13.0f, ImVec2(position.x + (width - size.x) * 0.5f, position.y + px(9.0f)), rgba(255, 255, 255, 235), label);
+        return clicked;
+    }
+
     void draw_combat(card_layout& layout)
     {
         static const char* aim_keys[] = { "Mouse 1", "Mouse 4", "Mouse 5", "Always" };
@@ -718,13 +786,51 @@ namespace
             toggle_row("Smoke overlay", &remove_smoke);
             toggle_row("Scope overlay", &remove_scope);
         });
-        layout.add(0, "skin_changer", "Skin Changer", "Active weapon paint override", 175.0f, "skin paint kit wear seed stattrak", [] {
-            toggle_row("Enabled", &settings::skin_changer_enabled, [] {
-                slider_row("Paint kit ID", &settings::skin_paint_kit, 0.0f, 20000.0f, "%.0f");
-                slider_row("Seed", &settings::skin_seed, 0.0f, 1000.0f, "%.0f");
-                slider_row("Wear", &settings::skin_wear, 0.0001f, 1.0f, "%.4f");
-                toggle_row("StatTrak", &settings::skin_stattrak);
-            });
+    }
+
+    void draw_skins(card_layout& layout)
+    {
+        static int pending_weapon = settings::skin_weapon_definition;
+        static int pending_paint = static_cast<int>(settings::skin_paint_kit);
+
+        layout.add(0, "skin_weapons", "Weapons", "Choose an inventory weapon", 0.0f, "weapon ak awp m4 deagle", [&] {
+            for (const auto& weapon : skin_catalog::weapons)
+            {
+                if (catalog_row(weapon.name, weapon.name, pending_weapon == weapon.definition))
+                {
+                    pending_weapon = weapon.definition;
+                    const auto first = std::find_if(skin_catalog::paint_kits.begin(), skin_catalog::paint_kits.end(),
+                        [&](const auto& kit) { return kit.weapon_definition == pending_weapon; });
+                    if (first != skin_catalog::paint_kits.end()) pending_paint = first->id;
+                }
+                ImGui::Dummy(px(1.0f, 3.0f));
+            }
+        });
+
+        layout.add(1, "skin_paints", "Paint kits", "Compatible finishes with game rarity", 0.0f, "skin paint rarity", [&] {
+            for (const auto& kit : skin_catalog::paint_kits)
+            {
+                if (kit.weapon_definition != pending_weapon) continue;
+                char id[48]{};
+                std::snprintf(id, sizeof(id), "%d_%d", kit.weapon_definition, kit.id);
+                if (catalog_row(id, kit.name, pending_paint == kit.id, kit.rarity)) pending_paint = kit.id;
+                ImGui::Dummy(px(1.0f, 3.0f));
+            }
+        });
+
+        layout.add(1, "skin_apply", "Application", "Explicitly rebuild the selected weapon", 0.0f, "apply wear seed stattrak", [&] {
+            toggle_row("Skin changer", &settings::skin_changer_enabled);
+            slider_row("Seed", &settings::skin_seed, 0.0f, 1000.0f, "%.0f");
+            slider_row("Wear", &settings::skin_wear, 0.0001f, 1.0f, "%.4f");
+            toggle_row("StatTrak", &settings::skin_stattrak);
+            ImGui::Dummy(px(1.0f, 5.0f));
+            if (action_button("Apply skin"))
+            {
+                settings::skin_changer_enabled = true;
+                settings::skin_weapon_definition = pending_weapon;
+                settings::skin_paint_kit = static_cast<float>(pending_paint);
+                ++settings::skin_apply_revision;
+            }
         });
     }
 
@@ -874,8 +980,8 @@ namespace
             y += px(39.0f);
         }
 
-        add_text(draw, fonts::regular, 12.0f, ImVec2(origin.x + px(14.0f), origin.y + px(285.0f)), rgba(255, 255, 255, 95), "Other");
-        y = origin.y + px(302.0f);
+        add_text(draw, fonts::regular, 12.0f, ImVec2(origin.x + px(14.0f), origin.y + px(324.0f)), rgba(255, 255, 255, 95), "Other");
+        y = origin.y + px(341.0f);
         for (const category_entry& entry : categories)
         {
             if (!entry.secondary)
@@ -955,6 +1061,7 @@ namespace
             case category::movement: draw_movement(layout); break;
             case category::visuals: draw_visuals(layout); break;
             case category::player: draw_player(layout); break;
+            case category::skins: draw_skins(layout); break;
             case category::misc: draw_misc(layout); break;
             case category::configs: draw_configs(layout); break;
             case category::scripts: draw_scripts(layout); break;

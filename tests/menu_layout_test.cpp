@@ -19,6 +19,7 @@ int main()
     settings::third_person_distance = 173.0f;
     settings::world_modulation_enabled = true;
     settings::skin_changer_enabled = true;
+    settings::skin_weapon_definition = 1;
     settings::skin_paint_kit = 711.0f;
     settings::skin_seed = 42.0f;
     settings::skin_wear = 0.13f;
@@ -30,13 +31,14 @@ int main()
     settings::third_person_distance = 40.0f;
     settings::world_modulation_enabled = false;
     settings::skin_changer_enabled = false;
+    settings::skin_weapon_definition = 7;
     settings::skin_paint_kit = 0.0f;
     settings::skin_seed = 0.0f;
     settings::skin_wear = 1.0f;
     settings::skin_stattrak = false;
     if (!config::load() || std::abs(settings::aim_fov - 9.25f) > 0.001f ||
         !settings::third_person_enabled || std::abs(settings::third_person_distance - 173.0f) > 0.001f ||
-        !settings::world_modulation_enabled || !settings::skin_changer_enabled ||
+        !settings::world_modulation_enabled || !settings::skin_changer_enabled || settings::skin_weapon_definition != 1 ||
         std::abs(settings::skin_paint_kit - 711.0f) > 0.001f || std::abs(settings::skin_seed - 42.0f) > 0.001f ||
         std::abs(settings::skin_wear - 0.13f) > 0.001f || !settings::skin_stattrak)
         return 7;
@@ -91,7 +93,7 @@ int main()
 
     constexpr float window_x = (1920.0f - 690.0f) * 0.5f;
     constexpr float window_y = (1080.0f - 510.0f) * 0.5f;
-    constexpr float category_rows[] = { 78.0f, 117.0f, 156.0f, 195.0f, 234.0f, 302.0f, 341.0f };
+    constexpr float category_rows[] = { 78.0f, 117.0f, 156.0f, 195.0f, 234.0f, 273.0f, 341.0f, 380.0f };
     for (const float row : category_rows)
     {
         io.AddMousePosEvent(window_x + 50.0f, window_y + row + 15.0f);

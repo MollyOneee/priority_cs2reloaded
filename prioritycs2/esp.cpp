@@ -29,9 +29,10 @@ namespace
         std::uint32_t pawn_alive{}, pawn_handle{}, player_name{}, health{}, team{};
         std::uint32_t scene_node{}, dormant{}, absolute_origin{}, model_state{};
         std::uint32_t spotted_state{}, spotted_mask{}, crosshair_entity{};
-        std::uint32_t weapon_services{}, active_weapon{}, attribute_manager{}, item{}, item_definition_index{};
+        std::uint32_t weapon_services{}, active_weapon{}, my_weapons{}, attribute_manager{}, item{}, item_definition_index{};
         std::uint32_t item_id_high{}, item_id_low{}, account_id{}, initialized{};
         std::uint32_t fallback_paint{}, fallback_seed{}, fallback_wear{}, fallback_stattrak{}, steam_id{};
+        std::uint32_t hud_model_arms{}, child{}, owner{}, next_sibling{};
 
         bool valid() const
         {
@@ -77,7 +78,13 @@ namespace
 
     std::unordered_map<std::uintptr_t, original_skin_t> original_skins;
     using weapon_update_skin_fn = void(__fastcall*)(std::uintptr_t, int*);
+    using weapon_set_mesh_group_fn = void(__fastcall*)(std::uintptr_t, bool);
+    using weapon_update_composite_fn = void(__fastcall*)(std::uintptr_t, char);
     weapon_update_skin_fn weapon_update_skin{};
+    weapon_set_mesh_group_fn weapon_set_mesh_group{};
+    weapon_update_composite_fn weapon_update_composite{};
+    std::uint32_t processed_skin_revision{};
+    std::uint32_t last_skin_active_handle{};
     bool local_player_available{};
 
     // Plain SEH boundary: bad game pointers are rejected without a VirtualQuery per field.
@@ -204,6 +211,9 @@ namespace
         state.offsets.active_weapon = schema_offset("CPlayer_WeaponServices", "m_hActiveWeapon");
         if (!state.offsets.active_weapon)
             state.offsets.active_weapon = schema_offset("CCSPlayer_WeaponServices", "m_hActiveWeapon");
+        state.offsets.my_weapons = schema_offset("CPlayer_WeaponServices", "m_hMyWeapons");
+        if (!state.offsets.my_weapons)
+            state.offsets.my_weapons = schema_offset("CCSPlayer_WeaponServices", "m_hMyWeapons");
         state.offsets.attribute_manager = schema_offset("C_EconEntity", "m_AttributeManager");
         state.offsets.item = schema_offset("C_AttributeContainer", "m_Item");
         state.offsets.item_definition_index = schema_offset("C_EconItemView", "m_iItemDefinitionIndex");
@@ -216,10 +226,25 @@ namespace
         state.offsets.fallback_wear = schema_offset("C_EconEntity", "m_flFallbackWear");
         state.offsets.fallback_stattrak = schema_offset("C_EconEntity", "m_nFallbackStatTrak");
         state.offsets.steam_id = schema_offset("CBasePlayerController", "m_steamID");
+        state.offsets.hud_model_arms = schema_offset("C_CSPlayerPawn", "m_hHudModelArms");
+        state.offsets.child = schema_offset("CGameSceneNode", "m_pChild");
+        state.offsets.owner = schema_offset("CGameSceneNode", "m_pOwner");
+        state.offsets.next_sibling = schema_offset("CGameSceneNode", "m_pNextSibling");
         if (!weapon_update_skin)
         {
             weapon_update_skin = reinterpret_cast<weapon_update_skin_fn>(pattern::find(client,
                 "48 89 5C 24 10 48 89 6C 24 18 48 89 74 24 20 57 41 56 41 57 48 83 EC 40 48 8B EA 48 8B F1 48 8D 54 24 60 E8 ? ? ? ? 48 8B 46 10"));
+        }
+        if (!weapon_set_mesh_group)
+        {
+            const auto call = pattern::find(client,
+                "E8 ? ? ? ? E9 ? ? ? ? 83 B8 A8 0A 00 00 00 0F 8F ? ? ? ? 83 B8 C0 0A 00 00 00");
+            weapon_set_mesh_group = reinterpret_cast<weapon_set_mesh_group_fn>(pattern::resolve_relative(call));
+        }
+        if (!weapon_update_composite)
+        {
+            const auto anchor = pattern::find(client, "00 40 0F B6 D7 48 8B CB E8 ? ? ? ? 48 8D 4C 24 20");
+            weapon_update_composite = reinterpret_cast<weapon_update_composite_fn>(pattern::resolve_relative(anchor ? anchor + 8 : 0));
         }
         state.initialized = state.offsets.valid();
         return state.initialized;
@@ -238,14 +263,40 @@ namespace
         return !handle || handle == 0xffffffff ? 0 : entity_by_index(entity_list, static_cast<int>(handle & 0x7fff));
     }
 
-    bool is_player_controller(std::uintptr_t entity)
+    bool schema_class_name(std::uintptr_t entity, char* output, std::size_t output_size)
     {
+        if (!entity || !output || output_size < 2)
+            return false;
         const auto identity = read<std::uintptr_t>(entity + 0x10);
         const auto class_info = read<std::uintptr_t>(identity + 0x8);
         const auto name_container = read<std::uintptr_t>(class_info + 0x8);
         const auto name_pointer = read<std::uintptr_t>(name_container + 0x8);
-        char name[24]{};
-        return name_pointer && safe_copy(name, reinterpret_cast<const void*>(name_pointer), sizeof(name) - 1) && std::strcmp(name, "CCSPlayerController") == 0;
+        return name_pointer && safe_copy(output, reinterpret_cast<const void*>(name_pointer), output_size - 1);
+    }
+
+    bool is_player_controller(std::uintptr_t entity)
+    {
+        char name[32]{};
+        return schema_class_name(entity, name, sizeof(name)) && std::strcmp(name, "CCSPlayerController") == 0;
+    }
+
+    std::uintptr_t hud_model_weapon(std::uintptr_t entity_list, std::uintptr_t local_pawn)
+    {
+        const auto& offsets = state.offsets;
+        if (!entity_list || !local_pawn || !offsets.hud_model_arms || !offsets.child || !offsets.owner || !offsets.next_sibling)
+            return 0;
+        const auto arms = entity_by_handle(entity_list, read<std::uint32_t>(local_pawn + offsets.hud_model_arms));
+        const auto scene = arms ? read<std::uintptr_t>(arms + offsets.scene_node) : 0;
+        auto node = scene ? read<std::uintptr_t>(scene + offsets.child) : 0;
+        for (int depth = 0; node && depth < 32; ++depth)
+        {
+            const auto owner = read<std::uintptr_t>(node + offsets.owner);
+            char name[40]{};
+            if (owner && schema_class_name(owner, name, sizeof(name)) && std::strcmp(name, "C_CS2HudModelWeapon") == 0)
+                return owner;
+            node = read<std::uintptr_t>(node + offsets.next_sibling);
+        }
+        return 0;
     }
 
     bool project(const vector3& world, const matrix4x4& matrix, const ImVec2& display, ImVec2& screen, float* clip_w = nullptr)
@@ -477,7 +528,7 @@ namespace
         return base * std::pow(0.98f, distance / 500.0f);
     }
 
-    void refresh_weapon_skin(std::uintptr_t weapon)
+    void update_skin_material(std::uintptr_t weapon)
     {
         if (!weapon_update_skin || !weapon)
             return;
@@ -485,6 +536,37 @@ namespace
         {
             int empty_mask[3]{};
             weapon_update_skin(weapon, empty_mask);
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER) {}
+    }
+
+    void rebuild_weapon_skin(std::uintptr_t entity_list, std::uintptr_t local_pawn, std::uintptr_t weapon, bool update_view_model)
+    {
+        if (!weapon)
+            return;
+        update_skin_material(weapon);
+        __try
+        {
+            // These are the same refresh steps used by Velocity after changing the
+            // fallback econ fields. Merely writing the paint kit does not invalidate
+            // CS2's composite material cache.
+            *reinterpret_cast<bool*>(weapon + 0x18b8) = false;
+            if (weapon_set_mesh_group) weapon_set_mesh_group(weapon + 0x608, true);
+            call_virtual<void>(reinterpret_cast<void*>(weapon), 11, 1);
+            call_virtual<void>(reinterpret_cast<void*>(weapon), 110, 1);
+            if (weapon_update_composite) weapon_update_composite(weapon, 0);
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER) {}
+
+        if (!update_view_model)
+            return;
+        const auto view_model = hud_model_weapon(entity_list, local_pawn);
+        if (!view_model)
+            return;
+        update_skin_material(view_model);
+        __try
+        {
+            if (weapon_set_mesh_group) weapon_set_mesh_group(view_model + 0x608, true);
         }
         __except (EXCEPTION_EXECUTE_HANDLER) {}
     }
@@ -500,6 +582,9 @@ namespace
 
         if (!settings::skin_changer_enabled || settings::skin_paint_kit < 1.0f)
         {
+            const auto restore_services = read<std::uintptr_t>(local_pawn + offsets.weapon_services);
+            const auto restore_active = restore_services ? entity_by_handle(entity_list,
+                read<std::uint32_t>(restore_services + offsets.active_weapon)) : 0;
             for (auto& [weapon, original] : original_skins)
             {
                 if (!original.captured || !original.overridden)
@@ -513,14 +598,37 @@ namespace
                 write(weapon + offsets.fallback_seed, original.seed);
                 write(weapon + offsets.fallback_wear, original.wear);
                 write(weapon + offsets.fallback_stattrak, original.stattrak);
-                refresh_weapon_skin(weapon);
+                rebuild_weapon_skin(entity_list, local_pawn, weapon, weapon == restore_active);
             }
             original_skins.clear();
+            processed_skin_revision = settings::skin_apply_revision;
             return;
         }
 
         const auto services = read<std::uintptr_t>(local_pawn + offsets.weapon_services);
-        const auto weapon = services ? entity_by_handle(entity_list, read<std::uint32_t>(services + offsets.active_weapon)) : 0;
+        if (!services)
+            return;
+        const std::uint32_t active_handle = read<std::uint32_t>(services + offsets.active_weapon);
+        const auto active_entity = entity_by_handle(entity_list, active_handle);
+        std::uintptr_t weapon{};
+        if (offsets.my_weapons)
+        {
+            const auto weapons_base = services + offsets.my_weapons;
+            const int count = read<int>(weapons_base);
+            const auto handles = read<std::uintptr_t>(weapons_base + 0x8);
+            for (int index = 0; handles && index < std::clamp(count, 0, 64); ++index)
+            {
+                const auto candidate = entity_by_handle(entity_list, read<std::uint32_t>(handles + static_cast<std::uintptr_t>(index) * 4));
+                if (!candidate) continue;
+                const auto definition = read<std::uint16_t>(candidate + offsets.attribute_manager + offsets.item + offsets.item_definition_index);
+                if (definition == settings::skin_weapon_definition) { weapon = candidate; break; }
+            }
+        }
+        if (!weapon)
+        {
+            const auto definition = active_entity ? read<std::uint16_t>(active_entity + offsets.attribute_manager + offsets.item + offsets.item_definition_index) : 0;
+            if (definition == settings::skin_weapon_definition) weapon = active_entity;
+        }
         if (!weapon)
             return;
 
@@ -543,8 +651,11 @@ namespace
         const int seed = std::clamp(static_cast<int>(std::round(settings::skin_seed)), 0, 1000);
         const float wear = std::clamp(settings::skin_wear, 0.0001f, 1.0f);
         const int stattrak = settings::skin_stattrak ? 0 : -1;
-        if (original.overridden && original.applied_paint == paint_kit && original.applied_seed == seed &&
-            original.applied_stattrak == stattrak && std::abs(original.applied_wear - wear) < 0.00001f)
+        const bool explicit_apply = processed_skin_revision != settings::skin_apply_revision;
+        const bool active_changed = last_skin_active_handle != active_handle;
+        last_skin_active_handle = active_handle;
+        if (!explicit_apply && !active_changed && original.overridden && original.applied_paint == paint_kit &&
+            original.applied_seed == seed && original.applied_stattrak == stattrak && std::abs(original.applied_wear - wear) < 0.00001f)
             return;
 
         const std::uint64_t steam_id = offsets.steam_id && local_controller ? read<std::uint64_t>(local_controller + offsets.steam_id) : 0;
@@ -561,7 +672,8 @@ namespace
         original.applied_seed = seed;
         original.applied_wear = wear;
         original.applied_stattrak = stattrak;
-        refresh_weapon_skin(weapon);
+        processed_skin_revision = settings::skin_apply_revision;
+        rebuild_weapon_skin(entity_list, local_pawn, weapon, weapon == active_entity);
     }
 
     void run_trigger(const std::array<player_snapshot, 64>& players, std::size_t player_count,
@@ -636,6 +748,20 @@ namespace
 
 namespace esp
 {
+    void on_frame_stage(int stage)
+    {
+        if (stage != 6 || (!settings::skin_changer_enabled && original_skins.empty()))
+            return;
+        if (!state.initialized && !initialize())
+            return;
+        const auto entity_list = read<std::uintptr_t>(state.entity_list_storage);
+        const auto local_controller = read<std::uintptr_t>(state.local_controller_storage);
+        const auto local_pawn = entity_list && local_controller ? entity_by_handle(entity_list,
+            read<std::uint32_t>(local_controller + state.offsets.pawn_handle)) : 0;
+        if (entity_list && local_pawn)
+            run_skin_changer(entity_list, local_controller, local_pawn);
+    }
+
     void draw(ImDrawList* draw_list, const ImVec2& display_size)
     {
         if (trigger_runtime.holding && (!settings::trigger_enabled || menu::is_open()))
@@ -644,7 +770,7 @@ namespace esp
             trigger_runtime = {};
         }
         if ((!settings::esp_enabled && !settings::aim_enabled && !settings::trigger_enabled &&
-            !settings::third_person_enabled && !settings::skin_changer_enabled && original_skins.empty()) ||
+            !settings::third_person_enabled && !settings::skin_changer_enabled) ||
             !draw_list || display_size.x <= 0.0f || display_size.y <= 0.0f)
         {
             local_player_available = false;
@@ -675,7 +801,6 @@ namespace esp
         local_eye.z += 64.0f;
         const int local_team = local_pawn ? read<int>(local_pawn + state.offsets.team) : 0;
         local_player_available = local_pawn && read<int>(local_pawn + state.offsets.health) > 0;
-        run_skin_changer(entity_list, local_controller, local_pawn);
         int local_index{};
         for (int entity_index = 1; entity_index <= 64 && !local_index; ++entity_index)
             if (entity_by_index(entity_list, entity_index) == local_controller) local_index = entity_index;
@@ -767,6 +892,10 @@ namespace esp
         trigger_runtime = {};
         original_skins.clear();
         weapon_update_skin = nullptr;
+        weapon_set_mesh_group = nullptr;
+        weapon_update_composite = nullptr;
+        processed_skin_revision = 0;
+        last_skin_active_handle = 0;
         local_player_available = false;
         state = {};
         game_trace::reset();

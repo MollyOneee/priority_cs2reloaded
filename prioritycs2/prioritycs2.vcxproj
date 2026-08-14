@@ -96,6 +96,7 @@
     <ClInclude Include="renderer.hpp" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="settings.hpp" />
+    <ClInclude Include="skin_catalog.hpp" />
     <ClInclude Include="trace.hpp" />
     <ClInclude Include="external\imgui\imconfig.h" />
     <ClInclude Include="external\imgui\imgui.h" />

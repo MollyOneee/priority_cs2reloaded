@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 
 namespace
 {
@@ -27,6 +28,7 @@ namespace
     using get_keyboard_state_fn = BOOL(WINAPI*)(PBYTE);
     using override_view_fn = void(__fastcall*)(std::uintptr_t, std::uintptr_t);
     using draw_scene_object_fn = std::uintptr_t(__fastcall*)(std::uintptr_t, std::uintptr_t, std::uintptr_t, int, int, std::uintptr_t, std::uintptr_t, std::uintptr_t);
+    using frame_stage_fn = void(__fastcall*)(std::uintptr_t, int);
     struct viewmodel_vector { float x{}, y{}, z{}; };
     using viewmodel_fn = void(__fastcall*)(__int64, viewmodel_vector*, float*);
 
@@ -50,6 +52,61 @@ namespace
     void* override_view_target = nullptr;
     draw_scene_object_fn original_draw_scene_object = nullptr;
     void* draw_scene_object_target = nullptr;
+    frame_stage_fn original_frame_stage = nullptr;
+    void* frame_stage_target = nullptr;
+
+    bool readable_address(const void* address)
+    {
+        MEMORY_BASIC_INFORMATION information{};
+        if (!address || !VirtualQuery(address, &information, sizeof(information)) || information.State != MEM_COMMIT)
+            return false;
+        if (information.Protect & PAGE_GUARD)
+            return false;
+        const DWORD protection = information.Protect & 0xff;
+        return protection != PAGE_NOACCESS;
+    }
+
+    bool executable_address(const void* address)
+    {
+        MEMORY_BASIC_INFORMATION information{};
+        if (!address || !VirtualQuery(address, &information, sizeof(information)) || information.State != MEM_COMMIT)
+            return false;
+        if (information.Protect & PAGE_GUARD)
+            return false;
+        const DWORD protection = information.Protect & 0xff;
+        return protection == PAGE_EXECUTE || protection == PAGE_EXECUTE_READ || protection == PAGE_EXECUTE_READWRITE || protection == PAGE_EXECUTE_WRITECOPY;
+    }
+
+    bool is_world_material(std::uintptr_t material)
+    {
+        if (!readable_address(reinterpret_cast<void*>(material)))
+            return false;
+        __try
+        {
+            auto** table = *reinterpret_cast<void***>(material);
+            if (!table || !readable_address(table) || !executable_address(table[0]))
+                return false;
+            using get_name_fn = const char* (__fastcall*)(std::uintptr_t);
+            const char* name = reinterpret_cast<get_name_fn>(table[0])(material);
+            if (!name || !readable_address(name))
+                return false;
+            char path[192]{};
+            strncpy_s(path, name, _TRUNCATE);
+            if (std::strncmp(path, "materials/", 10) != 0)
+                return false;
+            constexpr const char* excluded[] = {
+                "materials/models/", "materials/weapons/", "materials/characters/", "materials/effects/",
+                "materials/panorama/", "materials/vgui/", "skybox", "cloud", "sun/"
+            };
+            for (const char* fragment : excluded)
+                if (std::strstr(path, fragment)) return false;
+            return true;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return false;
+        }
+    }
 
     void __fastcall override_view(std::uintptr_t context, std::uintptr_t view_setup)
     {
@@ -84,16 +141,27 @@ namespace
                 static_cast<std::uint8_t>(std::clamp(color.x, 0.0f, 1.0f) * 255.0f),
                 static_cast<std::uint8_t>(std::clamp(color.y, 0.0f, 1.0f) * 255.0f),
                 static_cast<std::uint8_t>(std::clamp(color.z, 0.0f, 1.0f) * 255.0f),
-                static_cast<std::uint8_t>(std::clamp(color.w, 0.0f, 1.0f) * 255.0f)
+                255
             };
             __try
             {
                 for (int index = 0; index < batch_count; ++index)
-                    *reinterpret_cast<packed_color*>(batch + static_cast<std::uintptr_t>(index) * 0x68 + 0x50) = tint;
+                {
+                    const auto mesh = batch + static_cast<std::uintptr_t>(index) * 0x68;
+                    const auto material = *reinterpret_cast<std::uintptr_t*>(mesh + 0x20);
+                    if (is_world_material(material))
+                        *reinterpret_cast<packed_color*>(mesh + 0x50) = tint;
+                }
             }
             __except (EXCEPTION_EXECUTE_HANDLER) {}
         }
         return original_draw_scene_object(a1, a2, batch, batch_count, a5, a6, a7, a8);
+    }
+
+    void __fastcall frame_stage(std::uintptr_t context, int stage)
+    {
+        esp::on_frame_stage(stage);
+        original_frame_stage(context, stage);
     }
 
     void __fastcall viewmodel(__int64 context, viewmodel_vector* position, float* fov)
@@ -341,11 +409,14 @@ namespace
         const auto scene_anchor = pattern::find(L"scenesystem.dll", "48 8D 05 ? ? ? ? 48 89 07 48 8B 7C 24 48");
         const auto scene_table = pattern::resolve_relative(scene_anchor, 3, 7);
         draw_scene_object_target = scene_table ? *reinterpret_cast<void**>(scene_table + 0x8) : nullptr;
+        frame_stage_target = reinterpret_cast<void*>(pattern::find(L"client.dll",
+            "48 89 5C 24 18 48 89 6C 24 20 57 48 83 EC 40 48 8B F9"));
 
-        return viewmodel_target && override_view_target && draw_scene_object_target &&
+        return viewmodel_target && override_view_target && draw_scene_object_target && frame_stage_target &&
             MH_CreateHook(viewmodel_target, &viewmodel, reinterpret_cast<void**>(&original_viewmodel)) == MH_OK &&
             MH_CreateHook(override_view_target, &override_view, reinterpret_cast<void**>(&original_override_view)) == MH_OK &&
-            MH_CreateHook(draw_scene_object_target, &draw_scene_object, reinterpret_cast<void**>(&original_draw_scene_object)) == MH_OK;
+            MH_CreateHook(draw_scene_object_target, &draw_scene_object, reinterpret_cast<void**>(&original_draw_scene_object)) == MH_OK &&
+            MH_CreateHook(frame_stage_target, &frame_stage, reinterpret_cast<void**>(&original_frame_stage)) == MH_OK;
     }
 }
 

@@ -27,6 +27,7 @@
     <ClInclude Include="renderer.hpp"><Filter>Core</Filter></ClInclude>
     <ClInclude Include="resource.h"><Filter>Resources</Filter></ClInclude>
     <ClInclude Include="settings.hpp"><Filter>Core</Filter></ClInclude>
+    <ClInclude Include="skin_catalog.hpp"><Filter>Core</Filter></ClInclude>
     <ClInclude Include="trace.hpp"><Filter>Core</Filter></ClInclude>
     <ClInclude Include="external\imgui\imconfig.h"><Filter>External\ImGui</Filter></ClInclude>
     <ClInclude Include="external\imgui\imgui.h"><Filter>External\ImGui</Filter></ClInclude>

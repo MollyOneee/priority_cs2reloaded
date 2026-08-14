@@ -3,6 +3,7 @@
 #include <imgui.h>
 
 #include <array>
+#include <cstdint>
 
 namespace settings
 {
@@ -35,10 +36,12 @@ namespace settings
     inline ImVec4 world_modulation_color{ 0.55f, 0.60f, 0.75f, 1.0f };
 
     inline bool skin_changer_enabled = false;
-    inline float skin_paint_kit = 0.0f;
+    inline int skin_weapon_definition = 7;
+    inline float skin_paint_kit = 302.0f;
     inline float skin_seed = 0.0f;
     inline float skin_wear = 0.08f;
     inline bool skin_stattrak = false;
+    inline std::uint32_t skin_apply_revision = 1;
 
     inline bool esp_enabled = true;
     inline bool esp_box = true;

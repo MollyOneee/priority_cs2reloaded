@@ -83,6 +83,7 @@ namespace
         color("world.color", settings::world_modulation_color);
 
         boolean("skin.enabled", settings::skin_changer_enabled);
+        integer("skin.weapon_definition", settings::skin_weapon_definition);
         number("skin.paint_kit", settings::skin_paint_kit);
         number("skin.seed", settings::skin_seed);
         number("skin.wear", settings::skin_wear);
@@ -226,6 +227,7 @@ namespace
         color("world.color", settings::world_modulation_color);
 
         boolean("skin.enabled", settings::skin_changer_enabled);
+        integer("skin.weapon_definition", settings::skin_weapon_definition);
         number("skin.paint_kit", settings::skin_paint_kit);
         number("skin.seed", settings::skin_seed);
         number("skin.wear", settings::skin_wear);
@@ -263,6 +265,7 @@ namespace
         settings::viewmodel_fov = std::clamp(settings::viewmodel_fov, 60.0f, 68.0f);
         settings::third_person_distance = std::clamp(settings::third_person_distance, 40.0f, 220.0f);
         settings::skin_paint_kit = std::clamp(settings::skin_paint_kit, 0.0f, 20000.0f);
+        settings::skin_weapon_definition = std::clamp(settings::skin_weapon_definition, 1, 64);
         settings::skin_seed = std::clamp(settings::skin_seed, 0.0f, 1000.0f);
         settings::skin_wear = std::clamp(settings::skin_wear, 0.0001f, 1.0f);
     }
